@@ -66,34 +66,66 @@ elif menu == "Registrar Entrenamiento":
     alumnos = df["Nombre"].unique().tolist()
     alumno_sel = st.selectbox("Seleccionar Alumno", alumnos)
     if alumno_sel:
-        with st.form("form_entreno"):
-            rutina = st.text_input("Nombre de la Rutina")
-            ejercicio = st.text_input("Ejercicio realizado")
-            repes = st.number_input("Repeticiones", min_value=1)
-            series = st.number_input("Series", min_value=1)
-            peso_util = st.number_input("Peso utilizado (kg)", min_value=0.0)
-            enviar = st.form_submit_button("Guardar entrenamiento")
+        rutina = st.text_input("Nombre de la Rutina")
 
-            if enviar:
+        st.markdown("### Ejercicios del día")
+
+        ejercicios = st.session_state.get("ejercicios_temp", [])
+
+        # Agregar nuevo ejercicio temporalmente
+        with st.form("form_nuevo_ejercicio"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_ejercicio = st.text_input("Ejercicio realizado", key="nuevo_ejercicio")
+                repes = st.number_input("Repeticiones", min_value=1, key="nuevo_repes")
+            with col2:
+                series = st.number_input("Series", min_value=1, key="nuevo_series")
+                peso_util = st.number_input("Peso utilizado (kg)", min_value=0.0, key="nuevo_peso")
+
+            add = st.form_submit_button("➕ Agregar ejercicio")
+
+            if add:
+                if nuevo_ejercicio:
+                    ejercicios.append({
+                        "Ejercicio": nuevo_ejercicio,
+                        "Repeticiones": repes,
+                        "Series": series,
+                        "Peso utilizado (kg)": peso_util
+                    })
+                    st.session_state.ejercicios_temp = ejercicios
+                else:
+                    st.warning("Debes escribir un ejercicio")
+
+        if ejercicios:
+            st.write("#### Ejercicios agregados:")
+            for i, ej in enumerate(ejercicios):
+                st.write(f"{i+1}. {ej['Ejercicio']} – {ej['Repeticiones']} reps, {ej['Series']} series, {ej['Peso utilizado (kg)']} kg")
+
+            if st.button("✅ Guardar entrenamiento completo"):
                 datos_alumno = df[df.Nombre == alumno_sel].iloc[0]
-                nueva_fila = {
-                    "Nombre": alumno_sel,
-                    "Edad": datos_alumno["Edad"],
-                    "Fecha de Nacimiento": datos_alumno["Fecha de Nacimiento"],
-                    "Peso (kg)": datos_alumno["Peso (kg)"],
-                    "Estatura (cm)": datos_alumno["Estatura (cm)"],
-                    "Enfermedad": datos_alumno["Enfermedad"],
-                    "Días por semana": datos_alumno["Días por semana"],
-                    "Fecha": datetime.date.today(),
-                    "Rutina": rutina,
-                    "Ejercicio": ejercicio,
-                    "Repeticiones": repes,
-                    "Series": series,
-                    "Peso utilizado (kg)": peso_util
-                }
-                df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
+                for ej in ejercicios:
+                    nueva_fila = {
+                        "Nombre": alumno_sel,
+                        "Edad": datos_alumno["Edad"],
+                        "Fecha de Nacimiento": datos_alumno["Fecha de Nacimiento"],
+                        "Peso (kg)": datos_alumno["Peso (kg)"],
+                        "Estatura (cm)": datos_alumno["Estatura (cm)"],
+                        "Enfermedad": datos_alumno["Enfermedad"],
+                        "Días por semana": datos_alumno["Días por semana"],
+                        "Fecha": datetime.date.today(),
+                        "Rutina": rutina,
+                        "Ejercicio": ej["Ejercicio"],
+                        "Repeticiones": ej["Repeticiones"],
+                        "Series": ej["Series"],
+                        "Peso utilizado (kg)": ej["Peso utilizado (kg)"]
+                    }
+                    df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
+
                 df.to_excel(DB_FILE, index=False)
-                st.success("Entrenamiento guardado ✅")
+                st.success("Entrenamiento completo guardado ✅")
+
+                # Reset lista temporal
+                st.session_state.ejercicios_temp = []
 
 # Dashboard
 elif menu == "Dashboard":
