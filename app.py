@@ -10,7 +10,7 @@ st.set_page_config(page_title="Control de Alumnos - Gimnasio", layout="wide")
 
 st.title("🏋️ Control de Alumnos - Chilotitos Fitness")
 
-# Load or create database
+# Cargar o crear base de datos
 DB_FILE = "datos_alumnos.xlsx"
 if os.path.exists(DB_FILE):
     df = pd.read_excel(DB_FILE)
@@ -21,21 +21,31 @@ else:
         "Repeticiones", "Series", "Peso utilizado (kg)"
     ])
 
+# Mostrar logo si existe
 if os.path.exists("assets/logo.png"):
     st.sidebar.image("assets/logo.png", width=200)
 
-menu = st.sidebar.radio("Navegación", ["Registrar Alumno", "Registrar Entrenamiento", "Dashboard", "Exportar a Excel", "Generar PDF Alumno"])
+# Menú de navegación
+menu = st.sidebar.radio("Navegación", [
+    "Registrar Alumno", "Registrar Entrenamiento", "Dashboard",
+    "Exportar a Excel", "Generar PDF Alumno"
+])
 
+# Registrar alumno
 if menu == "Registrar Alumno":
     st.subheader("📋 Registro de Información Personal")
     with st.form("form_registro"):
         nombre = st.text_input("Nombre")
         edad = st.number_input("Edad", min_value=5, max_value=100)
-        fecha_nac = st.date_input("Fecha de Nacimiento")
+        fecha_nac = st.date_input(
+            "Fecha de Nacimiento",
+            min_value=datetime.date(1900, 1, 1),
+            max_value=datetime.date.today()
+        )
         peso = st.number_input("Peso corporal (kg)", min_value=0.0)
         estatura = st.number_input("Estatura (cm)", min_value=0.0)
         enfermedad = st.text_input("¿Tiene alguna enfermedad?")
-        dias = st.selectbox("¿Cuántos días asistirá por semana?", [1,2,3,4,5,6])
+        dias = st.selectbox("¿Cuántos días asistirá por semana?", [1, 2, 3, 4, 5, 6])
         enviar = st.form_submit_button("Guardar")
 
         if enviar:
@@ -50,6 +60,7 @@ if menu == "Registrar Alumno":
             df.to_excel(DB_FILE, index=False)
             st.success("Alumno registrado con éxito ✅")
 
+# Registrar entrenamiento
 elif menu == "Registrar Entrenamiento":
     st.subheader("🏃 Registro de Entrenamiento")
     alumnos = df["Nombre"].unique().tolist()
@@ -64,14 +75,15 @@ elif menu == "Registrar Entrenamiento":
             enviar = st.form_submit_button("Guardar entrenamiento")
 
             if enviar:
+                datos_alumno = df[df.Nombre == alumno_sel].iloc[0]
                 nueva_fila = {
                     "Nombre": alumno_sel,
-                    "Edad": df[df.Nombre == alumno_sel]["Edad"].iloc[0],
-                    "Fecha de Nacimiento": df[df.Nombre == alumno_sel]["Fecha de Nacimiento"].iloc[0],
-                    "Peso (kg)": df[df.Nombre == alumno_sel]["Peso (kg)"].iloc[0],
-                    "Estatura (cm)": df[df.Nombre == alumno_sel]["Estatura (cm)"].iloc[0],
-                    "Enfermedad": df[df.Nombre == alumno_sel]["Enfermedad"].iloc[0],
-                    "Días por semana": df[df.Nombre == alumno_sel]["Días por semana"].iloc[0],
+                    "Edad": datos_alumno["Edad"],
+                    "Fecha de Nacimiento": datos_alumno["Fecha de Nacimiento"],
+                    "Peso (kg)": datos_alumno["Peso (kg)"],
+                    "Estatura (cm)": datos_alumno["Estatura (cm)"],
+                    "Enfermedad": datos_alumno["Enfermedad"],
+                    "Días por semana": datos_alumno["Días por semana"],
                     "Fecha": datetime.date.today(),
                     "Rutina": rutina,
                     "Ejercicio": ejercicio,
@@ -83,6 +95,7 @@ elif menu == "Registrar Entrenamiento":
                 df.to_excel(DB_FILE, index=False)
                 st.success("Entrenamiento guardado ✅")
 
+# Dashboard
 elif menu == "Dashboard":
     st.subheader("📊 Dashboard por Alumno")
     alumnos = df["Nombre"].unique().tolist()
@@ -90,10 +103,11 @@ elif menu == "Dashboard":
     datos = df[df["Nombre"] == alumno_sel]
     st.dataframe(datos)
 
+# Exportar a Excel
 elif menu == "Exportar a Excel":
     st.subheader("📥 Exportar Datos")
     excel_buffer = io.BytesIO()
-    df.to_excel(excel_buffer, index=False, engine='openpyxl')
+    df.to_excel(excel_buffer, index=False, engine="openpyxl")
     excel_buffer.seek(0)
 
     st.download_button(
@@ -103,6 +117,7 @@ elif menu == "Exportar a Excel":
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
+# Generar PDF
 elif menu == "Generar PDF Alumno":
     st.subheader("📄 Generar Reporte PDF")
     alumnos = df["Nombre"].unique().tolist()
