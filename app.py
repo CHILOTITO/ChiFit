@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import os
+import io
 from fpdf import FPDF
 
 st.set_page_config(page_title="Control de Alumnos - Gimnasio", layout="wide")
@@ -20,7 +21,8 @@ else:
         "Repeticiones", "Series", "Peso utilizado (kg)"
     ])
 
-st.sidebar.image("assets/logo.png", width=200)
+if os.path.exists("assets/logo.png"):
+    st.sidebar.image("assets/logo.png", width=200)
 
 menu = st.sidebar.radio("Navegación", ["Registrar Alumno", "Registrar Entrenamiento", "Dashboard", "Exportar a Excel", "Generar PDF Alumno"])
 
@@ -90,7 +92,16 @@ elif menu == "Dashboard":
 
 elif menu == "Exportar a Excel":
     st.subheader("📥 Exportar Datos")
-    st.download_button("Descargar Excel", data=df.to_excel(index=False), file_name="registro_alumnos.xlsx")
+    excel_buffer = io.BytesIO()
+    df.to_excel(excel_buffer, index=False, engine='openpyxl')
+    excel_buffer.seek(0)
+
+    st.download_button(
+        label="Descargar Excel",
+        data=excel_buffer,
+        file_name="registro_alumnos.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 elif menu == "Generar PDF Alumno":
     st.subheader("📄 Generar Reporte PDF")
