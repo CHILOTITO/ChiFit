@@ -27,11 +27,15 @@ else:
         "Repeticiones", "Series", "Peso utilizado (kg)"
     ])
 
-# Función para autenticar (sin cache)
+# Función para autenticar (sin cache para actualizar siempre)
 def autenticar(usuario, clave):
     usuarios = pd.read_excel(USERS_FILE)
     match = usuarios[(usuarios["Usuario"] == usuario) & (usuarios["Contraseña"] == clave)]
     return not match.empty
+
+# Variable para mostrar formulario de creación de cuenta
+if "mostrar_formulario" not in st.session_state:
+    st.session_state.mostrar_formulario = False
 
 # Página de inicio de sesión
 if "usuario" not in st.session_state:
@@ -48,28 +52,25 @@ if "usuario" not in st.session_state:
             st.error("Usuario o contraseña incorrectos")
 
     st.sidebar.markdown("¿No tienes cuenta?")
-    if "mostrar_formulario" not in st.session_state:
-    st.session_state.mostrar_formulario = False
+    if st.sidebar.button("Crear cuenta"):
+        st.session_state.mostrar_formulario = True
 
-if st.sidebar.button("Crear cuenta"):
-    st.session_state.mostrar_formulario = True
+    if st.session_state.mostrar_formulario:
+        with st.form("form_crear_cuenta"):
+            nuevo_usuario = st.text_input("Nuevo usuario")
+            nueva_clave = st.text_input("Nueva contraseña", type="password")
+            crear = st.form_submit_button("Crear cuenta")
 
-if st.session_state.mostrar_formulario:
-    with st.form("form_crear_cuenta"):
-        nuevo_usuario = st.text_input("Nuevo usuario")
-        nueva_clave = st.text_input("Nueva contraseña", type="password")
-        crear = st.form_submit_button("Crear cuenta")
-
-        if crear:
-            usuarios = pd.read_excel(USERS_FILE)
-            if nuevo_usuario in usuarios["Usuario"].values:
-                st.warning("El usuario ya existe")
-            else:
-                nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
-                usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
-                usuarios.to_excel(USERS_FILE, index=False)
-                st.success("✅ Cuenta creada con éxito. Ahora puedes iniciar sesión.")
-                st.session_state.mostrar_formulario = False
+            if crear:
+                usuarios = pd.read_excel(USERS_FILE)
+                if nuevo_usuario in usuarios["Usuario"].values:
+                    st.warning("El usuario ya existe")
+                else:
+                    nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
+                    usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
+                    usuarios.to_excel(USERS_FILE, index=False)
+                    st.success("✅ Cuenta creada con éxito. Ahora puedes iniciar sesión.")
+                    st.session_state.mostrar_formulario = False
 
 else:
     # Mostrar logo si existe
@@ -78,12 +79,16 @@ else:
 
     menu = st.sidebar.radio("Navegación", [
         "Registrar Alumno", "Registrar Entrenamiento", "Dashboard",
-        "Exportar a Excel", "Generar PDF Alumno"
+        "Exportar a Excel", "Generar PDF Alumno", "Cerrar Sesión"
     ])
 
     usuario_activo = st.session_state.usuario
 
-    if menu == "Registrar Alumno":
+    if menu == "Cerrar Sesión":
+        st.session_state.pop("usuario")
+        st.experimental_rerun()
+
+    elif menu == "Registrar Alumno":
         st.subheader("📋 Registro de Información Personal")
         with st.form("form_registro"):
             nombre = st.text_input("Nombre")
