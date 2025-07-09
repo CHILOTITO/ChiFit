@@ -1,196 +1,179 @@
-# app.py
+# Nueva versión mejorada de la app de Chilotitos Fitness
+# Incluye: contraseñas encriptadas, separación de perfiles, dashboard visual, mejoras de UI
+
 import streamlit as st
 import sqlite3
-import datetime
 import pandas as pd
+import hashlib
+import datetime
 import io
+import plotly.express as px
 from fpdf import FPDF
-import os
-import calendar
 
-st.set_page_config(page_title="Chilotitos Fitness - Red Social", layout="wide")
+# Config
+st.set_page_config(page_title="Chilotitos Fitness", layout="wide")
 st.title("💪 Chilotitos Fitness - Comunidad de Entrenamiento")
 
-# Conexión a la base de datos SQLite
+# DB setup
 conn = sqlite3.connect("usuarios.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Crear tablas si no existen
+# Hashing de contraseña
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# DB creation
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        usuario TEXT PRIMARY KEY,
-        contrasena TEXT NOT NULL,
-        tipo TEXT NOT NULL
-    )
+CREATE TABLE IF NOT EXISTS usuarios (
+    usuario TEXT PRIMARY KEY,
+    contrasena TEXT NOT NULL,
+    tipo TEXT NOT NULL
+)
 """)
+
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS perfiles (
-        usuario TEXT PRIMARY KEY,
-        nombre TEXT,
-        edad INTEGER,
-        fecha_nacimiento TEXT,
-        peso REAL,
-        estatura REAL,
-        enfermedad TEXT,
-        dias_semana INTEGER
-    )
+CREATE TABLE IF NOT EXISTS perfiles (
+    usuario TEXT PRIMARY KEY,
+    nombre TEXT,
+    edad INTEGER,
+    fecha_nacimiento TEXT,
+    peso REAL,
+    estatura REAL,
+    enfermedad TEXT,
+    dias_semana INTEGER
+)
 """)
+
 cursor.execute("""
-    CREATE TABLE IF NOT EXISTS entrenamientos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT,
-        fecha TEXT,
-        rutina TEXT,
-        ejercicio TEXT,
-        repeticiones INTEGER,
-        series INTEGER,
-        peso_utilizado REAL
-    )
+CREATE TABLE IF NOT EXISTS entrenamientos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario TEXT,
+    fecha TEXT,
+    rutina TEXT,
+    ejercicio TEXT,
+    repeticiones INTEGER,
+    series INTEGER,
+    peso_utilizado REAL
+)
 """)
 conn.commit()
 
-# Funciones
+# Autenticación y creación de usuarios
 
 def autenticar(usuario, clave):
-    cursor.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, clave))
+    cursor.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, hash_password(clave)))
     return cursor.fetchone()
 
-def crear_usuario(nuevo_usuario, nueva_clave, tipo):
+def crear_usuario(usuario, clave, tipo):
     try:
-        cursor.execute("INSERT INTO usuarios (usuario, contrasena, tipo) VALUES (?, ?, ?)", (nuevo_usuario, nueva_clave, tipo))
+        cursor.execute("INSERT INTO usuarios VALUES (?, ?, ?)", (usuario, hash_password(clave), tipo))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
         return False
 
-# Estado para formulario
-if "mostrar_formulario" not in st.session_state:
-    st.session_state.mostrar_formulario = False
-
-# INICIO DE SESIÓN
+# Sesiones y login
 if "usuario" not in st.session_state:
     st.sidebar.subheader("Iniciar Sesión")
-    usuario = st.sidebar.text_input("Usuario")
-    clave = st.sidebar.text_input("Contraseña", type="password")
+    user = st.sidebar.text_input("Usuario")
+    pw = st.sidebar.text_input("Contraseña", type="password")
     login = st.sidebar.button("Ingresar")
 
     if login:
-        datos_usuario = autenticar(usuario, clave)
-        if datos_usuario:
-            st.session_state.usuario = datos_usuario[0]
-            st.session_state.tipo = datos_usuario[2]
-            st.session_state.logged_in = True
+        datos = autenticar(user, pw)
+        if datos:
+            st.session_state.usuario = datos[0]
+            st.session_state.tipo = datos[2]
+            st.success("Bienvenido/a " + datos[0])
+            st.experimental_rerun()
+        else:
+            st.error("Credenciales incorrectas")
 
-    if st.session_state.get("logged_in", False):
-        st.session_state.logged_in = False
+    if st.sidebar.button("Crear cuenta"):
+        with st.form("registro"):
+            new_user = st.text_input("Nuevo usuario")
+            new_pw = st.text_input("Nueva contraseña", type="password")
+            tipo = st.selectbox("Tipo de cuenta", ["alumno", "admin"])
+            nombre = st.text_input("Nombre completo")
+            edad = st.number_input("Edad", min_value=5, max_value=100)
+            nac = st.date_input("Fecha de nacimiento")
+            peso = st.number_input("Peso (kg)", min_value=0.0)
+            est = st.number_input("Estatura (cm)", min_value=0.0)
+            enf = st.text_input("Enfermedad")
+            dias = st.selectbox("Días por semana", [1,2,3,4,5,6])
+            submit = st.form_submit_button("Registrar cuenta")
+
+            if submit:
+                creado = crear_usuario(new_user, new_pw, tipo)
+                if creado:
+                    cursor.execute("INSERT INTO perfiles VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                                   (new_user, nombre, edad, nac.isoformat(), peso, est, enf, dias))
+                    conn.commit()
+                    st.success("Cuenta creada exitosamente")
+                else:
+                    st.warning("Usuario ya existe")
+
+else:
+    tipo = st.session_state.tipo
+    usuario = st.session_state.usuario
+
+    st.sidebar.markdown(f"**Usuario:** `{usuario}`")
+    st.sidebar.markdown(f"**Tipo:** `{tipo}`")
+
+    opciones_admin = ["🏷 Perfiles", "📊 Dashboard", "📤 Exportar"]
+    opciones_alumno = ["🏃 Entrenamientos", "📅 Mi Calendario", "📊 Mi Progreso"]
+    menu = st.sidebar.radio("Menú", opciones_admin if tipo == "admin" else opciones_alumno + ["📤 Exportar"])
+
+    if st.sidebar.button("Cerrar sesión"):
+        st.session_state.clear()
         st.experimental_rerun()
 
-    st.sidebar.markdown("¿No tienes cuenta?")
-    if st.sidebar.button("Crear cuenta"):
-        st.session_state.mostrar_formulario = True
+    if menu == "🏷 Perfiles" and tipo == "admin":
+        df = pd.read_sql("SELECT * FROM perfiles", conn)
+        st.subheader("Perfiles de Alumnos")
+        st.dataframe(df, use_container_width=True)
 
-    if st.session_state.mostrar_formulario:
-        with st.form("form_crear_cuenta"):
-            nuevo_usuario = st.text_input("Nuevo usuario")
-            nueva_clave = st.text_input("Nueva contraseña", type="password")
-            tipo = st.selectbox("Tipo de cuenta", ["alumno", "admin"])
-            nombre = st.text_input("Nombre")
-            edad = st.number_input("Edad", min_value=5, max_value=100)
-            fecha_nac = st.date_input("Fecha de Nacimiento")
-            peso = st.number_input("Peso corporal (kg)", min_value=0.0)
-            estatura = st.number_input("Estatura (cm)", min_value=0.0)
-            enfermedad = st.text_input("¿Tiene alguna enfermedad?")
-            dias = st.selectbox("¿Cuántos días asistirá por semana?", [1, 2, 3, 4, 5, 6])
-            crear = st.form_submit_button("Crear cuenta")
+    elif menu == "🏃 Entrenamientos":
+        st.subheader("Registrar Entrenamiento")
+        with st.form("entreno"):
+            rutina = st.text_input("Rutina")
+            ej = st.text_input("Ejercicio")
+            rep = st.number_input("Repeticiones", min_value=1)
+            ser = st.number_input("Series", min_value=1)
+            pes = st.number_input("Peso utilizado (kg)", min_value=0.0)
+            guardar = st.form_submit_button("Guardar")
+            if guardar:
+                hoy = datetime.date.today().isoformat()
+                cursor.execute("""
+                    INSERT INTO entrenamientos (usuario, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (usuario, hoy, rutina, ej, rep, ser, pes))
+                conn.commit()
+                st.success("Entrenamiento guardado")
 
-            if crear:
-                if crear_usuario(nuevo_usuario, nueva_clave, tipo):
-                    cursor.execute("""
-                        INSERT INTO perfiles (usuario, nombre, edad, fecha_nacimiento, peso, estatura, enfermedad, dias_semana)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (nuevo_usuario, nombre, edad, fecha_nac.isoformat(), peso, estatura, enfermedad, dias))
-                    conn.commit()
-                    st.success("✅ Cuenta creada con éxito. Ahora puedes iniciar sesión.")
-                    st.session_state.mostrar_formulario = False
-                else:
-                    st.warning("⚠️ El usuario ya existe. Elige otro.")
-else:
-    if os.path.exists("assets/logo.png"):
-        st.sidebar.image("assets/logo.png", width=200)
+    elif menu == "📅 Mi Calendario":
+        df = pd.read_sql_query("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario,))
+        if df.empty:
+            st.info("Sin entrenamientos registrados")
+        else:
+            df["fecha"] = pd.to_datetime(df["fecha"])
+            fechas = df["fecha"].dt.date.unique()
+            for f in sorted(fechas):
+                st.markdown(f"### {f}")
+                st.dataframe(df[df["fecha"].dt.date == f])
 
-    usuario_activo = st.session_state.usuario
-    tipo_usuario = st.session_state.tipo
+    elif menu == "📊 Dashboard" or menu == "📊 Mi Progreso":
+        df = pd.read_sql("SELECT * FROM entrenamientos" + ("" if tipo == "admin" else " WHERE usuario = ?"), conn, params=None if tipo == "admin" else (usuario,))
+        if not df.empty:
+            df["fecha"] = pd.to_datetime(df["fecha"])
+            st.subheader("Progreso de Rutinas")
+            fig = px.histogram(df, x="fecha", color="usuario" if tipo == "admin" else None, nbins=30, title="Entrenamientos por día")
+            st.plotly_chart(fig, use_container_width=True)
 
-    opciones_admin = ["Editar Perfiles", "Ver Entrenamientos", "Exportar a Excel", "Cerrar Sesión"]
-    opciones_alumno = ["Registrar Entrenamiento", "Calendario de Entrenamientos", "Exportar a Excel", "Cerrar Sesión"]
-
-    menu = st.sidebar.radio("Navegación", opciones_admin if tipo_usuario == "admin" else opciones_alumno)
-
-    if menu == "Cerrar Sesión":
-        st.session_state.clear()
-        st.success("Sesión cerrada correctamente")
-        st.stop()
-
-    elif menu == "Registrar Entrenamiento":
-        st.subheader("🏃 Registrar Entrenamiento")
-        rutina = st.text_input("Nombre de la Rutina")
-        ejercicio = st.text_input("Ejercicio")
-        repes = st.number_input("Repeticiones", min_value=1)
-        series = st.number_input("Series", min_value=1)
-        peso_util = st.number_input("Peso utilizado (kg)", min_value=0.0)
-        enviar = st.button("Guardar")
-
-        if enviar:
-            hoy = datetime.date.today().isoformat()
-            cursor.execute("""
-                INSERT INTO entrenamientos (usuario, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (usuario_activo, hoy, rutina, ejercicio, repes, series, peso_util))
-            conn.commit()
-            st.success("Entrenamiento guardado ✅")
-
-    elif menu == "Calendario de Entrenamientos":
-        st.subheader("📅 Calendario de Entrenamientos")
-        df = pd.read_sql_query("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario_activo,))
-        df["fecha"] = pd.to_datetime(df["fecha"])
-        fechas = df["fecha"].dt.date.unique()
-        for fecha in sorted(fechas):
-            st.markdown(f"### {fecha}")
-            st.dataframe(df[df["fecha"].dt.date == fecha])
-
-    elif menu == "Exportar a Excel":
-        st.subheader("📥 Exportar Datos")
-        df = pd.read_sql_query("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario_activo,))
+    elif menu == "📤 Exportar":
+        df = pd.read_sql_query("SELECT * FROM entrenamientos" + ("" if tipo == "admin" else " WHERE usuario = ?"), conn, params=None if tipo == "admin" else (usuario,))
         buffer = io.BytesIO()
         df.to_excel(buffer, index=False, engine='openpyxl')
         buffer.seek(0)
-        st.download_button(
-            label="Descargar Excel",
-            data=buffer,
-            file_name="registro_entrenamientos.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    elif menu == "Editar Perfiles" and tipo_usuario == "admin":
-        st.subheader("👥 Editar Perfiles de Alumnos")
-        alumnos = pd.read_sql_query("SELECT * FROM perfiles", conn)
-        alumno_sel = st.selectbox("Seleccionar alumno", alumnos["usuario"].unique())
-        datos = alumnos[alumnos["usuario"] == alumno_sel].iloc[0]
-
-        with st.form("editar_perfil"):
-            nombre = st.text_input("Nombre", value=datos["nombre"])
-            edad = st.number_input("Edad", min_value=5, max_value=100, value=int(datos["edad"]))
-            fecha_nac = st.date_input("Fecha de Nacimiento", value=pd.to_datetime(datos["fecha_nacimiento"]))
-            peso = st.number_input("Peso corporal (kg)", min_value=0.0, value=float(datos["peso"]))
-            estatura = st.number_input("Estatura (cm)", min_value=0.0, value=float(datos["estatura"]))
-            enfermedad = st.text_input("¿Tiene alguna enfermedad?", value=datos["enfermedad"])
-            dias = st.selectbox("Días por semana", [1,2,3,4,5,6], index=int(datos["dias_semana"])-1)
-            actualizar = st.form_submit_button("Actualizar")
-
-            if actualizar:
-                cursor.execute("""
-                    UPDATE perfiles SET nombre=?, edad=?, fecha_nacimiento=?, peso=?, estatura=?, enfermedad=?, dias_semana=?
-                    WHERE usuario = ?
-                """, (nombre, edad, fecha_nac.isoformat(), peso, estatura, enfermedad, dias, alumno_sel))
-                conn.commit()
-                st.success("Perfil actualizado ✅")
+        st.download_button("Descargar Excel", buffer, file_name="entrenamientos.xlsx")
