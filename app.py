@@ -101,8 +101,10 @@ else:
     usuario_activo = st.session_state.usuario
 
     if menu == "Cerrar Sesión":
-        st.session_state.pop("usuario")
-        st.experimental_rerun()
+        st.session_state.clear()
+        st.success("Sesión cerrada correctamente")
+        st.markdown("Vuelve a iniciar sesión desde el menú lateral.")
+        st.stop()
 
     elif menu == "Registrar Alumno":
         st.subheader("📋 Registro de Información Personal")
