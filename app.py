@@ -48,21 +48,28 @@ if "usuario" not in st.session_state:
             st.error("Usuario o contraseña incorrectos")
 
     st.sidebar.markdown("¿No tienes cuenta?")
-    if st.sidebar.button("Crear cuenta"):
-        with st.form("form_crear_cuenta"):
-            nuevo_usuario = st.text_input("Nuevo usuario")
-            nueva_clave = st.text_input("Nueva contraseña", type="password")
-            crear = st.form_submit_button("Crear cuenta")
+    if "mostrar_formulario" not in st.session_state:
+    st.session_state.mostrar_formulario = False
 
-            if crear:
-                usuarios = pd.read_excel(USERS_FILE)
-                if nuevo_usuario in usuarios["Usuario"].values:
-                    st.warning("El usuario ya existe")
-                else:
-                    nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
-                    usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
-                    usuarios.to_excel(USERS_FILE, index=False)
-                    st.success("Cuenta creada con éxito. Ahora puedes iniciar sesión arriba. ✅")
+if st.sidebar.button("Crear cuenta"):
+    st.session_state.mostrar_formulario = True
+
+if st.session_state.mostrar_formulario:
+    with st.form("form_crear_cuenta"):
+        nuevo_usuario = st.text_input("Nuevo usuario")
+        nueva_clave = st.text_input("Nueva contraseña", type="password")
+        crear = st.form_submit_button("Crear cuenta")
+
+        if crear:
+            usuarios = pd.read_excel(USERS_FILE)
+            if nuevo_usuario in usuarios["Usuario"].values:
+                st.warning("El usuario ya existe")
+            else:
+                nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
+                usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
+                usuarios.to_excel(USERS_FILE, index=False)
+                st.success("✅ Cuenta creada con éxito. Ahora puedes iniciar sesión.")
+                st.session_state.mostrar_formulario = False
 
 else:
     # Mostrar logo si existe
