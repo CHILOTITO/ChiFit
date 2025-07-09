@@ -27,7 +27,7 @@ else:
         "Repeticiones", "Series", "Peso utilizado (kg)"
     ])
 
-# @st.cache_data(ttl=300) ❌ NO USAR
+# Función para autenticar (sin cache)
 def autenticar(usuario, clave):
     usuarios = pd.read_excel(USERS_FILE)
     match = usuarios[(usuarios["Usuario"] == usuario) & (usuarios["Contraseña"] == clave)]
@@ -62,7 +62,8 @@ if "usuario" not in st.session_state:
                     nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
                     usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
                     usuarios.to_excel(USERS_FILE, index=False)
-                    st.success("Cuenta creada con éxito. Ahora puedes iniciar sesión.")
+                    st.success("Cuenta creada con éxito. Ahora puedes iniciar sesión arriba. ✅")
+
 else:
     # Mostrar logo si existe
     if os.path.exists("assets/logo.png"):
