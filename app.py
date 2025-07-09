@@ -112,7 +112,7 @@ if "usuario" not in st.session_state:
             new_user = st.text_input("Nuevo usuario")
             new_pw = st.text_input("Nueva contraseña", type="password")
             nombre = st.text_input("Nombre completo")
-            nac = st.date_input("Fecha de nacimiento")
+            nac = st.date_input("Fecha de nacimiento",min_value=datetime.date(1900, 1, 1),max_value=datetime.date.today()
             peso = st.number_input("Peso (kg)", min_value=0.0)
             est = st.number_input("Estatura (cm)", min_value=0.0)
             enf = st.text_input("Enfermedad")
