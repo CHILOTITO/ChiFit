@@ -69,7 +69,7 @@ if "usuario" not in st.session_state:
     if login:
         if autenticar(usuario, clave):
             st.session_state.usuario = usuario
-            st.success(f"Bienvenido/a, {usuario}")
+            st.experimental_rerun()
         else:
             st.error("Usuario o contraseña incorrectos")
 
