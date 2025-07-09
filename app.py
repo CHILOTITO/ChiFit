@@ -27,8 +27,7 @@ else:
         "Repeticiones", "Series", "Peso utilizado (kg)"
     ])
 
-# Función para autenticar
-@st.cache_data(ttl=300)
+# @st.cache_data(ttl=300) ❌ NO USAR
 def autenticar(usuario, clave):
     usuarios = pd.read_excel(USERS_FILE)
     match = usuarios[(usuarios["Usuario"] == usuario) & (usuarios["Contraseña"] == clave)]
