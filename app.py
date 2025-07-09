@@ -137,7 +137,7 @@ elif menu == "Dashboard":
 
 # Exportar a Excel
 elif menu == "Exportar a Excel":
-    st.subheader("📥 Exportar Datos")
+    st.subheader("📅 Exportar Datos")
     excel_buffer = io.BytesIO()
     df.to_excel(excel_buffer, index=False, engine="openpyxl")
     excel_buffer.seek(0)
