@@ -69,9 +69,12 @@ if "usuario" not in st.session_state:
     if login:
         if autenticar(usuario, clave):
             st.session_state.usuario = usuario
-            st.experimental_rerun()
+            st.session_state.logged_in = True
         else:
             st.error("Usuario o contraseña incorrectos")
+
+if st.session_state.get("logged_in", False):
+    st.experimental_rerun()
 
     st.sidebar.markdown("¿No tienes cuenta?")
     if st.sidebar.button("Crear cuenta"):
