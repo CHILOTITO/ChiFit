@@ -1,5 +1,5 @@
 # Nueva versión mejorada de la app de Chilotitos Fitness
-# Incluye: contraseñas encriptadas, separación de perfiles, dashboard visual, mejoras de UI
+# Incluye: contraseñas encriptadas, dashboard visual, mejoras de UI, red social básica, control de administrador
 
 import streamlit as st
 import sqlite3
@@ -12,6 +12,16 @@ from fpdf import FPDF
 
 # Config
 st.set_page_config(page_title="Chilotitos Fitness", layout="wide")
+st.markdown("""
+<style>
+    .main { background-color: #f5f5f5; }
+    .stButton > button {
+        background-color: #01bf71;
+        color: white;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
 st.title("💪 Chilotitos Fitness - Comunidad de Entrenamiento")
 
 # DB setup
@@ -19,7 +29,6 @@ conn = sqlite3.connect("usuarios.db", check_same_thread=False)
 cursor = conn.cursor()
 
 # Hashing de contraseña
-
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -28,7 +37,7 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS usuarios (
     usuario TEXT PRIMARY KEY,
     contrasena TEXT NOT NULL,
-    tipo TEXT NOT NULL
+    tipo TEXT NOT NULL DEFAULT 'alumno'
 )
 """)
 
@@ -36,7 +45,6 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS perfiles (
     usuario TEXT PRIMARY KEY,
     nombre TEXT,
-    edad INTEGER,
     fecha_nacimiento TEXT,
     peso REAL,
     estatura REAL,
@@ -57,17 +65,26 @@ CREATE TABLE IF NOT EXISTS entrenamientos (
     peso_utilizado REAL
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS publicaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario TEXT,
+    contenido TEXT,
+    fecha TEXT
+)
+""")
+
 conn.commit()
 
 # Autenticación y creación de usuarios
-
 def autenticar(usuario, clave):
     cursor.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, hash_password(clave)))
     return cursor.fetchone()
 
-def crear_usuario(usuario, clave, tipo):
+def crear_usuario(usuario, clave):
     try:
-        cursor.execute("INSERT INTO usuarios VALUES (?, ?, ?)", (usuario, hash_password(clave), tipo))
+        cursor.execute("INSERT INTO usuarios (usuario, contrasena) VALUES (?, ?)", (usuario, hash_password(clave)))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -94,9 +111,7 @@ if "usuario" not in st.session_state:
         with st.form("registro"):
             new_user = st.text_input("Nuevo usuario")
             new_pw = st.text_input("Nueva contraseña", type="password")
-            tipo = st.selectbox("Tipo de cuenta", ["alumno", "admin"])
             nombre = st.text_input("Nombre completo")
-            edad = st.number_input("Edad", min_value=5, max_value=100)
             nac = st.date_input("Fecha de nacimiento")
             peso = st.number_input("Peso (kg)", min_value=0.0)
             est = st.number_input("Estatura (cm)", min_value=0.0)
@@ -105,10 +120,10 @@ if "usuario" not in st.session_state:
             submit = st.form_submit_button("Registrar cuenta")
 
             if submit:
-                creado = crear_usuario(new_user, new_pw, tipo)
+                creado = crear_usuario(new_user, new_pw)
                 if creado:
-                    cursor.execute("INSERT INTO perfiles VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                   (new_user, nombre, edad, nac.isoformat(), peso, est, enf, dias))
+                    cursor.execute("INSERT INTO perfiles VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                   (new_user, nombre, nac.isoformat(), peso, est, enf, dias))
                     conn.commit()
                     st.success("Cuenta creada exitosamente")
                 else:
@@ -121,18 +136,41 @@ else:
     st.sidebar.markdown(f"**Usuario:** `{usuario}`")
     st.sidebar.markdown(f"**Tipo:** `{tipo}`")
 
-    opciones_admin = ["🏷 Perfiles", "📊 Dashboard", "📤 Exportar"]
-    opciones_alumno = ["🏃 Entrenamientos", "📅 Mi Calendario", "📊 Mi Progreso"]
-    menu = st.sidebar.radio("Menú", opciones_admin if tipo == "admin" else opciones_alumno + ["📤 Exportar"])
+    menu = st.sidebar.radio("Menú", ["📢 Muro", "🏃 Entrenamientos", "📅 Calendario", "📊 Progreso", "📤 Exportar"] + (["🔑 Asignar Admin", "🏷 Perfiles"] if tipo == "admin" else []))
 
     if st.sidebar.button("Cerrar sesión"):
         st.session_state.clear()
         st.experimental_rerun()
 
-    if menu == "🏷 Perfiles" and tipo == "admin":
+    if menu == "📢 Muro":
+        st.subheader("🗣 Publicaciones del gimnasio")
+        with st.form("nueva_pub"):
+            contenido = st.text_area("¿Qué quieres compartir hoy?")
+            publicar = st.form_submit_button("Publicar")
+            if publicar and contenido:
+                cursor.execute("INSERT INTO publicaciones (usuario, contenido, fecha) VALUES (?, ?, ?)",
+                               (usuario, contenido, datetime.date.today().isoformat()))
+                conn.commit()
+                st.success("Publicado")
+
+        publicaciones = pd.read_sql("SELECT * FROM publicaciones ORDER BY id DESC", conn)
+        for _, row in publicaciones.iterrows():
+            st.markdown(f"**{row['usuario']}** ({row['fecha']}):\n\n{row['contenido']}")
+            st.markdown("---")
+
+    elif menu == "🏷 Perfiles":
         df = pd.read_sql("SELECT * FROM perfiles", conn)
         st.subheader("Perfiles de Alumnos")
         st.dataframe(df, use_container_width=True)
+
+    elif menu == "🔑 Asignar Admin":
+        st.subheader("👑 Otorgar permisos de administrador")
+        usuarios = pd.read_sql("SELECT usuario FROM usuarios WHERE tipo = 'alumno'", conn)
+        seleccionar = st.selectbox("Selecciona un usuario", usuarios["usuario"])
+        if st.button("Convertir en administrador"):
+            cursor.execute("UPDATE usuarios SET tipo = 'admin' WHERE usuario = ?", (seleccionar,))
+            conn.commit()
+            st.success(f"{seleccionar} ahora es administrador")
 
     elif menu == "🏃 Entrenamientos":
         st.subheader("Registrar Entrenamiento")
@@ -152,7 +190,7 @@ else:
                 conn.commit()
                 st.success("Entrenamiento guardado")
 
-    elif menu == "📅 Mi Calendario":
+    elif menu == "📅 Calendario":
         df = pd.read_sql_query("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario,))
         if df.empty:
             st.info("Sin entrenamientos registrados")
@@ -160,19 +198,19 @@ else:
             df["fecha"] = pd.to_datetime(df["fecha"])
             fechas = df["fecha"].dt.date.unique()
             for f in sorted(fechas):
-                st.markdown(f"### {f}")
-                st.dataframe(df[df["fecha"].dt.date == f])
+                with st.expander(f"Entrenamientos del {f}"):
+                    st.dataframe(df[df["fecha"].dt.date == f])
 
-    elif menu == "📊 Dashboard" or menu == "📊 Mi Progreso":
-        df = pd.read_sql("SELECT * FROM entrenamientos" + ("" if tipo == "admin" else " WHERE usuario = ?"), conn, params=None if tipo == "admin" else (usuario,))
+    elif menu == "📊 Progreso":
+        df = pd.read_sql("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario,))
         if not df.empty:
             df["fecha"] = pd.to_datetime(df["fecha"])
             st.subheader("Progreso de Rutinas")
-            fig = px.histogram(df, x="fecha", color="usuario" if tipo == "admin" else None, nbins=30, title="Entrenamientos por día")
+            fig = px.histogram(df, x="fecha", nbins=30, title="Entrenamientos por día")
             st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "📤 Exportar":
-        df = pd.read_sql_query("SELECT * FROM entrenamientos" + ("" if tipo == "admin" else " WHERE usuario = ?"), conn, params=None if tipo == "admin" else (usuario,))
+        df = pd.read_sql_query("SELECT * FROM entrenamientos WHERE usuario = ?", conn, params=(usuario,))
         buffer = io.BytesIO()
         df.to_excel(buffer, index=False, engine='openpyxl')
         buffer.seek(0)
