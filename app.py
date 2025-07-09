@@ -42,7 +42,7 @@ cursor.execute("""
 """)
 conn.commit()
 
-# Funciones de autenticación y usuarios
+# Funciones de autenticación y gestión de usuarios
 def autenticar(usuario, clave):
     cursor.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, clave))
     return cursor.fetchone() is not None
@@ -59,7 +59,7 @@ def crear_usuario(nuevo_usuario, nueva_clave):
 if "mostrar_formulario" not in st.session_state:
     st.session_state.mostrar_formulario = False
 
-# Inicio de sesión
+# INICIO DE SESIÓN
 if "usuario" not in st.session_state:
     st.sidebar.subheader("Iniciar Sesión")
     usuario = st.sidebar.text_input("Usuario")
@@ -70,11 +70,10 @@ if "usuario" not in st.session_state:
         if autenticar(usuario, clave):
             st.session_state.usuario = usuario
             st.session_state.logged_in = True
-        else:
-            st.error("Usuario o contraseña incorrectos")
 
-if st.session_state.get("logged_in", False):
-    st.experimental_rerun()
+    if st.session_state.get("logged_in", False):
+        st.session_state.logged_in = False  # limpiar el flag
+        st.experimental_rerun()
 
     st.sidebar.markdown("¿No tienes cuenta?")
     if st.sidebar.button("Crear cuenta"):
@@ -106,7 +105,6 @@ else:
     if menu == "Cerrar Sesión":
         st.session_state.clear()
         st.success("Sesión cerrada correctamente")
-        st.markdown("Vuelve a iniciar sesión desde el menú lateral.")
         st.stop()
 
     elif menu == "Registrar Alumno":
@@ -114,7 +112,7 @@ else:
         with st.form("form_registro"):
             nombre = st.text_input("Nombre")
             edad = st.number_input("Edad", min_value=5, max_value=100)
-            fecha_nac = st.date_input("Fecha de Nacimiento", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today())
+            fecha_nac = st.date_input("Fecha de Nacimiento", min_value=datetime.date(1900, 1, 1))
             peso = st.number_input("Peso corporal (kg)", min_value=0.0)
             estatura = st.number_input("Estatura (cm)", min_value=0.0)
             enfermedad = st.text_input("¿Tiene alguna enfermedad?")
@@ -125,7 +123,10 @@ else:
                 cursor.execute("""
                     INSERT INTO alumnos (usuario, nombre, edad, fecha_nacimiento, peso, estatura, enfermedad, dias_semana, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, NULL, NULL)
-                """, (usuario_activo, nombre, edad, fecha_nac.isoformat(), peso, estatura, enfermedad, dias, datetime.date.today().isoformat()))
+                """, (
+                    usuario_activo, nombre, edad, fecha_nac.isoformat(), peso, estatura, enfermedad, dias,
+                    datetime.date.today().isoformat()
+                ))
                 conn.commit()
                 st.success("Alumno registrado con éxito ✅")
 
@@ -138,7 +139,6 @@ else:
         if alumno_sel:
             rutina = st.text_input("Nombre de la Rutina")
             st.markdown("### Ejercicios del día")
-
             ejercicios = st.session_state.get("ejercicios_temp", [])
 
             with st.form("form_nuevo_ejercicio"):
@@ -178,12 +178,12 @@ else:
                                 INSERT INTO alumnos (usuario, nombre, edad, fecha_nacimiento, peso, estatura, enfermedad, dias_semana, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, (
-                                usuario_activo, alumno_sel, alumno[3], alumno[4], alumno[5], alumno[6], alumno[7],
-                                alumno[8], datetime.date.today().isoformat(), rutina,
-                                ej["Ejercicio"], ej["Repeticiones"], ej["Series"], ej["Peso utilizado"]
+                                usuario_activo, alumno_sel, alumno[3], alumno[4], alumno[5], alumno[6],
+                                alumno[7], alumno[8], datetime.date.today().isoformat(),
+                                rutina, ej["Ejercicio"], ej["Repeticiones"], ej["Series"], ej["Peso utilizado"]
                             ))
                         conn.commit()
-                        st.success("Entrenamiento completo guardado ✅")
+                        st.success("Entrenamiento guardado ✅")
                         st.session_state.ejercicios_temp = []
 
     elif menu == "Dashboard":
