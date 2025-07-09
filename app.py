@@ -1,43 +1,65 @@
 # app.py
 import streamlit as st
-import pandas as pd
+import sqlite3
 import datetime
-import os
+import pandas as pd
 import io
 from fpdf import FPDF
+import os
 
 st.set_page_config(page_title="Chilotitos Fitness - Red Social", layout="wide")
-
 st.title("💪 Chilotitos Fitness - Comunidad de Entrenamiento")
 
-# Archivos de base de datos
-USERS_FILE = "usuarios.xlsx"
-DATA_FILE = "datos_alumnos.xlsx"
+# Conexión a la base de datos SQLite
+conn = sqlite3.connect("usuarios.db", check_same_thread=False)
+cursor = conn.cursor()
 
-# Crear archivos si no existen
-if not os.path.exists(USERS_FILE):
-    pd.DataFrame(columns=["Usuario", "Contraseña"]).to_excel(USERS_FILE, index=False)
+# Crear tablas si no existen
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        usuario TEXT PRIMARY KEY,
+        contrasena TEXT NOT NULL
+    )
+""")
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS alumnos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT,
+        nombre TEXT,
+        edad INTEGER,
+        fecha_nacimiento TEXT,
+        peso REAL,
+        estatura REAL,
+        enfermedad TEXT,
+        dias_semana INTEGER,
+        fecha TEXT,
+        rutina TEXT,
+        ejercicio TEXT,
+        repeticiones INTEGER,
+        series INTEGER,
+        peso_utilizado REAL
+    )
+""")
+conn.commit()
 
-if os.path.exists(DATA_FILE):
-    df = pd.read_excel(DATA_FILE)
-else:
-    df = pd.DataFrame(columns=[
-        "Usuario", "Nombre", "Edad", "Fecha de Nacimiento", "Peso (kg)", "Estatura (cm)",
-        "Enfermedad", "Días por semana", "Fecha", "Rutina", "Ejercicio",
-        "Repeticiones", "Series", "Peso utilizado (kg)"
-    ])
-
-# Función para autenticar (sin cache para actualizar siempre)
+# Funciones de autenticación y usuarios
 def autenticar(usuario, clave):
-    usuarios = pd.read_excel(USERS_FILE)
-    match = usuarios[(usuarios["Usuario"] == usuario) & (usuarios["Contraseña"] == clave)]
-    return not match.empty
+    cursor.execute("SELECT * FROM usuarios WHERE usuario = ? AND contrasena = ?", (usuario, clave))
+    return cursor.fetchone() is not None
 
-# Variable para mostrar formulario de creación de cuenta
+def crear_usuario(nuevo_usuario, nueva_clave):
+    try:
+        cursor.execute("INSERT INTO usuarios (usuario, contrasena) VALUES (?, ?)", (nuevo_usuario, nueva_clave))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+# Estado para formulario
 if "mostrar_formulario" not in st.session_state:
     st.session_state.mostrar_formulario = False
 
-# Página de inicio de sesión
+# Inicio de sesión
 if "usuario" not in st.session_state:
     st.sidebar.subheader("Iniciar Sesión")
     usuario = st.sidebar.text_input("Usuario")
@@ -62,18 +84,12 @@ if "usuario" not in st.session_state:
             crear = st.form_submit_button("Crear cuenta")
 
             if crear:
-                usuarios = pd.read_excel(USERS_FILE)
-                if nuevo_usuario in usuarios["Usuario"].values:
-                    st.warning("El usuario ya existe")
-                else:
-                    nuevo_df = pd.DataFrame([[nuevo_usuario, nueva_clave]], columns=["Usuario", "Contraseña"])
-                    usuarios = pd.concat([usuarios, nuevo_df], ignore_index=True)
-                    usuarios.to_excel(USERS_FILE, index=False)
+                if crear_usuario(nuevo_usuario, nueva_clave):
                     st.success("✅ Cuenta creada con éxito. Ahora puedes iniciar sesión.")
                     st.session_state.mostrar_formulario = False
-
+                else:
+                    st.warning("⚠️ El usuario ya existe. Elige otro.")
 else:
-    # Mostrar logo si existe
     if os.path.exists("assets/logo.png"):
         st.sidebar.image("assets/logo.png", width=200)
 
@@ -101,24 +117,21 @@ else:
             enviar = st.form_submit_button("Guardar")
 
             if enviar:
-                nueva_fila = {
-                    "Usuario": usuario_activo, "Nombre": nombre, "Edad": edad, "Fecha de Nacimiento": fecha_nac,
-                    "Peso (kg)": peso, "Estatura (cm)": estatura,
-                    "Enfermedad": enfermedad, "Días por semana": dias,
-                    "Fecha": datetime.date.today(), "Rutina": "", "Ejercicio": "",
-                    "Repeticiones": "", "Series": "", "Peso utilizado (kg)": ""
-                }
-                df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
-                df.to_excel(DATA_FILE, index=False)
+                cursor.execute("""
+                    INSERT INTO alumnos (usuario, nombre, edad, fecha_nacimiento, peso, estatura, enfermedad, dias_semana, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', NULL, NULL, NULL)
+                """, (usuario_activo, nombre, edad, fecha_nac.isoformat(), peso, estatura, enfermedad, dias, datetime.date.today().isoformat()))
+                conn.commit()
                 st.success("Alumno registrado con éxito ✅")
 
     elif menu == "Registrar Entrenamiento":
         st.subheader("🏃 Registro de Entrenamiento")
-        alumnos = df[df["Usuario"] == usuario_activo]["Nombre"].unique().tolist()
+        cursor.execute("SELECT DISTINCT nombre FROM alumnos WHERE usuario = ?", (usuario_activo,))
+        alumnos = [row[0] for row in cursor.fetchall()]
         alumno_sel = st.selectbox("Seleccionar Alumno", alumnos)
+
         if alumno_sel:
             rutina = st.text_input("Nombre de la Rutina")
-
             st.markdown("### Ejercicios del día")
 
             ejercicios = st.session_state.get("ejercicios_temp", [])
@@ -140,7 +153,7 @@ else:
                             "Ejercicio": nuevo_ejercicio,
                             "Repeticiones": repes,
                             "Series": series,
-                            "Peso utilizado (kg)": peso_util
+                            "Peso utilizado": peso_util
                         })
                         st.session_state.ejercicios_temp = ejercicios
                     else:
@@ -149,59 +162,54 @@ else:
             if ejercicios:
                 st.write("#### Ejercicios agregados:")
                 for i, ej in enumerate(ejercicios):
-                    st.write(f"{i+1}. {ej['Ejercicio']} – {ej['Repeticiones']} reps, {ej['Series']} series, {ej['Peso utilizado (kg)']} kg")
+                    st.write(f"{i+1}. {ej['Ejercicio']} – {ej['Repeticiones']} reps, {ej['Series']} series, {ej['Peso utilizado']} kg")
 
                 if st.button("✅ Guardar entrenamiento completo"):
-                    datos_alumno = df[(df["Nombre"] == alumno_sel) & (df["Usuario"] == usuario_activo)].iloc[0]
-                    for ej in ejercicios:
-                        nueva_fila = {
-                            "Usuario": usuario_activo,
-                            "Nombre": alumno_sel,
-                            "Edad": datos_alumno["Edad"],
-                            "Fecha de Nacimiento": datos_alumno["Fecha de Nacimiento"],
-                            "Peso (kg)": datos_alumno["Peso (kg)"],
-                            "Estatura (cm)": datos_alumno["Estatura (cm)"],
-                            "Enfermedad": datos_alumno["Enfermedad"],
-                            "Días por semana": datos_alumno["Días por semana"],
-                            "Fecha": datetime.date.today(),
-                            "Rutina": rutina,
-                            "Ejercicio": ej["Ejercicio"],
-                            "Repeticiones": ej["Repeticiones"],
-                            "Series": ej["Series"],
-                            "Peso utilizado (kg)": ej["Peso utilizado (kg)"]
-                        }
-                        df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
-
-                    df.to_excel(DATA_FILE, index=False)
-                    st.success("Entrenamiento completo guardado ✅")
-                    st.session_state.ejercicios_temp = []
+                    cursor.execute("SELECT * FROM alumnos WHERE nombre = ? AND usuario = ? ORDER BY id DESC LIMIT 1", (alumno_sel, usuario_activo))
+                    alumno = cursor.fetchone()
+                    if alumno:
+                        for ej in ejercicios:
+                            cursor.execute("""
+                                INSERT INTO alumnos (usuario, nombre, edad, fecha_nacimiento, peso, estatura, enfermedad, dias_semana, fecha, rutina, ejercicio, repeticiones, series, peso_utilizado)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                usuario_activo, alumno_sel, alumno[3], alumno[4], alumno[5], alumno[6], alumno[7],
+                                alumno[8], datetime.date.today().isoformat(), rutina,
+                                ej["Ejercicio"], ej["Repeticiones"], ej["Series"], ej["Peso utilizado"]
+                            ))
+                        conn.commit()
+                        st.success("Entrenamiento completo guardado ✅")
+                        st.session_state.ejercicios_temp = []
 
     elif menu == "Dashboard":
         st.subheader("📊 Dashboard por Alumno")
-        alumnos = df[df["Usuario"] == usuario_activo]["Nombre"].unique().tolist()
+        cursor.execute("SELECT DISTINCT nombre FROM alumnos WHERE usuario = ?", (usuario_activo,))
+        alumnos = [row[0] for row in cursor.fetchall()]
         alumno_sel = st.selectbox("Selecciona un alumno", alumnos)
-        datos = df[(df["Nombre"] == alumno_sel) & (df["Usuario"] == usuario_activo)]
-        st.dataframe(datos)
+        df = pd.read_sql_query("SELECT * FROM alumnos WHERE nombre = ? AND usuario = ?", conn, params=(alumno_sel, usuario_activo))
+        st.dataframe(df)
 
     elif menu == "Exportar a Excel":
         st.subheader("📥 Exportar Datos")
-        datos_usuario = df[df["Usuario"] == usuario_activo]
-        excel_buffer = io.BytesIO()
-        datos_usuario.to_excel(excel_buffer, index=False, engine="openpyxl")
-        excel_buffer.seek(0)
+        df = pd.read_sql_query("SELECT * FROM alumnos WHERE usuario = ?", conn, params=(usuario_activo,))
+        buffer = io.BytesIO()
+        df.to_excel(buffer, index=False, engine='openpyxl')
+        buffer.seek(0)
         st.download_button(
             label="Descargar Excel",
-            data=excel_buffer,
+            data=buffer,
             file_name="registro_alumnos.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     elif menu == "Generar PDF Alumno":
         st.subheader("📄 Generar Reporte PDF")
-        alumnos = df[df["Usuario"] == usuario_activo]["Nombre"].unique().tolist()
+        cursor.execute("SELECT DISTINCT nombre FROM alumnos WHERE usuario = ?", (usuario_activo,))
+        alumnos = [row[0] for row in cursor.fetchall()]
         alumno_sel = st.selectbox("Seleccionar alumno", alumnos)
+
         if alumno_sel:
-            datos = df[(df["Nombre"] == alumno_sel) & (df["Usuario"] == usuario_activo)]
+            datos = pd.read_sql_query("SELECT * FROM alumnos WHERE nombre = ? AND usuario = ?", conn, params=(alumno_sel, usuario_activo))
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
